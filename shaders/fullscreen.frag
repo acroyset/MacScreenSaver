@@ -55,14 +55,16 @@ float perlinNoise(vec3 pos, int scale, uvec3 res, uint state){
 float distToSegment(vec2 p, vec2 a, vec2 b) {
     vec2 ab = b - a;
     float t = dot(p - a, ab) / dot(ab, ab); // project p onto segment
-    if (t < 0 || t > 1) return min(length(p-a), length(p-b));
+    if (t > 1) return length(p-b);
+    if (t < 0) return length(p-a);
     vec2 closest = a + t * ab;
     return length(p - closest);
 }
 
 vec4 drawLineSegment(vec2 p, vec2 a, vec2 b, float width, vec4 lineColor, vec4 bgColor) {
+    if (a == b) return bgColor;
     width *= length(p-a)/length(a-b);
-    lineColor.a *= length(p-a)/length(a-b);
+    lineColor *= length(p-a)/length(a-b);
     // Signed distance from line edge: negative inside
     float d = distToSegment(p, a, b) - 0.5 * width;
 
@@ -74,38 +76,59 @@ vec4 drawLineSegment(vec2 p, vec2 a, vec2 b, float width, vec4 lineColor, vec4 b
     return mix(bgColor, lineColor, coverage);
 }
 
+vec3 hsb2rgb(vec3 c) {
+    // c.x = hue [0.0–1.0], c.y = saturation [0.0–1.0], c.z = brightness [0.0–1.0]
+    vec3 rgb = clamp(
+    abs(mod(c.x * 6.0 + vec3(0.0, 4.0, 2.0),
+    6.0) - 3.0) - 1.0,
+    0.0,
+    1.0);
+    rgb = rgb * rgb * (3.0 - 2.0 * rgb); // smooth curve (optional)
+    return c.z * mix(vec3(1.0), rgb, c.y);
+}
+
 // Simple animated gradient; replace with your effect.
 void main(){
     // Optional: aspect-corrected UV if you need square pixels
     ivec2 screenSpace = ivec2(int(fragCoord.x*resolution.x), int(fragCoord.y*resolution.y));
-    if (screenSpace.x > 2000 || screenSpace.y > 1000) return;
     vec2 uv = fragCoord * vec2(float(resolution.x)/float(resolution.y), 1.0);
 
-    vec3 color = vec3(
-            perlinNoise(vec3(screenSpace, int(iTime*200)), 800, uvec3(resolution, 3200), 0u),
-            perlinNoise(vec3(screenSpace, int(iTime*200)), 800, uvec3(resolution, 3200), 1u),
-            perlinNoise(vec3(screenSpace, int(iTime*200)), 800, uvec3(resolution, 3200), 2u)
-        );
-    color *= 2.5*perlinNoise(vec3(screenSpace, int(iTime*200)), 1600, uvec3(resolution, 3200), 4u);
-
-    int scale = 200;
-
-    int overlap = 5;
+    int scale = 40;
 
     vec4 accum = vec4(0);
 
-    for (int x = -scale + scale/overlap; x <= scale - scale/overlap; x += scale/overlap){
-        for (int y = -scale + scale/overlap; y <= scale - scale/overlap; y += scale/overlap){
-            ivec2 a = screenSpace/scale*scale + ivec2(scale/2) + ivec2(x, y);
+    int maxR = 120;
 
-            float angle = 2*3.14159265*perlinNoise(vec3(a, int(iTime*200)), 800, uvec3(resolution, 3200), 5u);
+    ivec2 minPos = screenSpace-ivec2(maxR);
+    ivec2 maxPos = screenSpace+ivec2(maxR);
+
+    if (minPos.x < 0) minPos.x = 0;
+    if (minPos.y < 0) minPos.y = 0;
+
+    minPos = minPos/scale*scale;
+    maxPos = (maxPos/scale + ivec2(1))*scale;
+
+    for (int x = minPos.x; x <= maxPos.x; x += scale){
+        for (int y = minPos.y; y <= maxPos.y; y += scale){
+            ivec2 a = ivec2(x, y);
+
+            vec2 HS = vec2(
+                perlinNoise(vec3(a, int(iTime*200)), 800, uvec3(resolution, 252000), 0u),
+                perlinNoise(vec3(a, int(iTime*200)), 700, uvec3(resolution, 252000), 1u)
+            );
+            float mag = 2*perlinNoise(vec3(a, int(iTime*200)), 1000, uvec3(resolution, 252000), 3u);
+            mag = mag*mag / 2;
+
+            vec3 color = hsb2rgb(vec3(HS, mag));
+
+            color *= 2.5*mag;
+
+            float angle = 2*3.14159265*perlinNoise(vec3(a, int(iTime*200)), 900, uvec3(resolution, 252000), 4u);
             vec2 vector = vec2(cos(angle), sin(angle));
 
-            float mag = perlinNoise(vec3(screenSpace, int(iTime*200)), 1600, uvec3(resolution, 3200), 4u);
+            ivec2 b = a+ivec2(vector*scale*4*mag);
 
-            ivec2 b = a+ivec2(vector*scale*0.9*mag);
-
-            accum += drawLineSegment(screenSpace, a,b, 10, vec4(color,1), vec4(0));
+            accum += drawLineSegment(screenSpace, a,b, 10*mag, vec4(color,1), vec4(0));
         }
     }
     FragColor = accum;
