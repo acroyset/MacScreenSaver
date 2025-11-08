@@ -3,11 +3,33 @@
 in vec2 fragCoord;
 out vec4 FragColor;
 
+#define RES_SIN 100
+
 layout(std430, binding = 0) buffer ssboNoiseMap { vec4 noiseMap[]; };
 
 uniform uvec2 resolution; // framebuffer size in pixels
 uniform float iTime;      // seconds since start
 uniform int scale;
+uniform float precomputedSin[RES_SIN];
+
+const float PI_2 = 2*3.1415926536;
+
+float sinLookup(float x){
+    x = mod(x, PI_2);
+
+    int index = int(x/PI_2 * RES_SIN);
+
+    float lower = float(index)/RES_SIN*PI_2;
+    float higher = float((index+1)%RES_SIN)/RES_SIN*PI_2;
+
+    float frac = (x-lower)/(higher-lower);
+
+    return mix(precomputedSin[index], precomputedSin[(index+1)%RES_SIN], frac);
+}
+
+float cosLookup(float x){
+    return sinLookup(x + PI_2/4);
+}
 
 float distToSegment(vec2 p, vec2 a, vec2 b) {
     vec2 ab = b - a;
@@ -50,7 +72,7 @@ void main(){
 
     vec4 accum = vec4(0);
 
-    int maxR = 240;
+    int maxR = 120;
 
     ivec2 minPos = screenSpace-ivec2(maxR);
     ivec2 maxPos = screenSpace+ivec2(maxR);
@@ -80,7 +102,7 @@ void main(){
             color *= 2.5*mag;
 
             float angle = 2*3.14159265*noiseMap[index].w;
-            vec2 vector = vec2(cos(angle), sin(angle));
+            vec2 vector = vec2(cosLookup(angle), sinLookup(angle));
 
             ivec2 b = a+ivec2(vector*scale*4*mag);
 

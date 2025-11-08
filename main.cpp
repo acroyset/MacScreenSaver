@@ -1,4 +1,5 @@
 #include <chrono>
+#include <cmath>
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -8,6 +9,8 @@
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
+
+#define RES_SIN 100
 
 // ---------- Globals ----------
 static GLFWwindow* window = nullptr;
@@ -226,14 +229,24 @@ int main() {
     if (!init()) return -1;
 
     // Cache uniform locations
-    const GLint uResolution = glGetUniformLocation(shaderProgram, "resolution");
-    const GLint uTime       = glGetUniformLocation(shaderProgram, "iTime");
-    const GLint uScale      = glGetUniformLocation(shaderProgram, "scale");
+    const GLint uResolution     = glGetUniformLocation(shaderProgram, "resolution");
+    const GLint uTime           = glGetUniformLocation(shaderProgram, "iTime");
+    const GLint uScale          = glGetUniformLocation(shaderProgram, "scale");
+    const GLint uPrecomputedSin = glGetUniformLocation(shaderProgram, "precomputedSin");
 
     constexpr int scale = 40;
     constexpr float speed = 200;
 
     const glm::uvec2 resolution = glm::uvec2(fbWidth, fbHeight);
+
+    float precomputedSin[RES_SIN];
+
+    constexpr float res = 2*M_PI / RES_SIN;
+
+    for (int i = 0; i < RES_SIN; i++) {
+        const float angle = float(i)/float(RES_SIN) * float(M_PI) * 2;
+        precomputedSin[i] = std::sin(angle);
+    }
 
     std::vector<glm::vec4> noiseMap;
     noiseMap.resize(resolution.x*resolution.y/scale/scale);
@@ -260,6 +273,7 @@ int main() {
         glUniform2ui(uResolution, static_cast<float>(fbWidth), static_cast<float>(fbHeight));
         glUniform1f(uTime, currentTime);
         glUniform1i(uScale, scale);
+        glUniform1fv(uPrecomputedSin, RES_SIN, precomputedSin);
 
         glBindVertexArray(vao);
         glDrawArrays(GL_TRIANGLES, 0, 3);
