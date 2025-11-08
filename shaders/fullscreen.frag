@@ -7,6 +7,7 @@ layout(std430, binding = 0) buffer ssboNoiseMap { vec4 noiseMap[]; };
 
 uniform uvec2 resolution; // framebuffer size in pixels
 uniform float iTime;      // seconds since start
+uniform int scale;
 
 float distToSegment(vec2 p, vec2 a, vec2 b) {
     vec2 ab = b - a;
@@ -43,18 +44,13 @@ vec3 hsb2rgb(vec3 c) {
     return c.z * mix(vec3(1.0), rgb, c.y);
 }
 
-// Simple animated gradient; replace with your effect.
 void main(){
-    // Optional: aspect-corrected UV if you need square pixels
-    ivec2 screenSpace = ivec2(int(fragCoord.x*resolution.x), int(fragCoord.y*resolution.y)) - ivec2(0, 20);
     vec2 uv = fragCoord * vec2(float(resolution.x)/float(resolution.y), 1.0);
-
-    int scale = 40;
-    float speed = 200;
+    ivec2 screenSpace = ivec2(int(uv.x*resolution.y), int(uv.y*resolution.y)) - ivec2(0, 20);
 
     vec4 accum = vec4(0);
 
-    int maxR = 120;
+    int maxR = 240;
 
     ivec2 minPos = screenSpace-ivec2(maxR);
     ivec2 maxPos = screenSpace+ivec2(maxR);
@@ -69,13 +65,15 @@ void main(){
 
     for (int x = minPos.x; x <= maxPos.x; x += scale){
         for (int y = minPos.y; y <= maxPos.y; y += scale){
-            ivec2 a = ivec2(x, y);
+            ivec2 a = ivec2(vec2(x, y)*1.1 - vec2(resolution)*0.05);
 
             uint index = y/scale * resolution.x/scale + x/scale - 1;
 
             vec2 HS = noiseMap[index].xy;
             float mag = 2*noiseMap[index].z;
             mag = mag*mag / 2;
+
+            HS.x = HS.x < 0.5 ? HS.x + 0.5 : HS.x - 0.5;
 
             vec3 color = hsb2rgb(vec3(HS, mag));
 
@@ -89,5 +87,10 @@ void main(){
             accum += drawLineSegment(screenSpace, a,b, 10*mag, vec4(color,1), vec4(0));
         }
     }
-    FragColor = accum;
+
+    float disToEdge = min(min(uv.x, uv.y), min(float(resolution.x)/float(resolution.y)-uv.x, 1-uv.y));
+    disToEdge *= 20;
+    disToEdge = clamp(disToEdge, 0, 1);
+
+    FragColor = accum;// * disToEdge;
 }

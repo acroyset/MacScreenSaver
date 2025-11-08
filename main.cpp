@@ -3,6 +3,7 @@
 #include <fstream>
 #include <sstream>
 #define GLAD_GL_IMPLEMENTATION
+#include <thread>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
@@ -158,7 +159,7 @@ static void shutdown() {
 }
 
 float smoothstepCubed(float a, float b, float t)  {
-    float v = -2*t*t*t + 3*t*t;
+    float v = ((6*t - 15)*t + 10)*t*t*t;
     return glm::mix(a, b, v);
 }
 
@@ -227,11 +228,12 @@ int main() {
     // Cache uniform locations
     const GLint uResolution = glGetUniformLocation(shaderProgram, "resolution");
     const GLint uTime       = glGetUniformLocation(shaderProgram, "iTime");
+    const GLint uScale      = glGetUniformLocation(shaderProgram, "scale");
 
-    int scale = 40;
-    float speed = 200;
+    constexpr int scale = 40;
+    constexpr float speed = 200;
 
-    glm::uvec2 resolution = glm::uvec2(fbWidth, fbHeight);
+    const glm::uvec2 resolution = glm::uvec2(fbWidth, fbHeight);
 
     std::vector<glm::vec4> noiseMap;
     noiseMap.resize(resolution.x*resolution.y/scale/scale);
@@ -243,12 +245,11 @@ int main() {
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssboNoiseMap);
 
     while (!glfwWindowShouldClose(window)) {
-        // Update time
-        const float t = static_cast<float>(glfwGetTime() - startTime);
+        const auto currentTime = static_cast<float>(glfwGetTime() - startTime);
 
         glClear(GL_COLOR_BUFFER_BIT);
 
-        updateNoiseMap(noiseMap, scale, speed, resolution, t);
+        updateNoiseMap(noiseMap, scale, speed, resolution, currentTime);
 
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboNoiseMap);
         void* ptr = glMapBufferRange(GL_SHADER_STORAGE_BUFFER, 0, sizeof(glm::vec4)*noiseMap.size(),GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
@@ -257,9 +258,9 @@ int main() {
 
         glUseProgram(shaderProgram);
         glUniform2ui(uResolution, static_cast<float>(fbWidth), static_cast<float>(fbHeight));
-        glUniform1f(uTime, t);
+        glUniform1f(uTime, currentTime);
+        glUniform1i(uScale, scale);
 
-        // Draw 1 big triangle via gl_VertexID (0..2) — no VBO needed
         glBindVertexArray(vao);
         glDrawArrays(GL_TRIANGLES, 0, 3);
 
